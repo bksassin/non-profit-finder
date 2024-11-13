@@ -18,7 +18,7 @@ export function SearchBar({ value, onChange, onCategoryReset }: SearchBarProps) 
           onChange(e.target.value);
           onCategoryReset();
         }}
-        placeholder="Search by name, location (e.g., CA, California), or description..."
+        placeholder="Search by cause or description..."
         className="w-full pl-10 pr-4 py-3 rounded-xl glass glass-hover focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
       />
     </div>

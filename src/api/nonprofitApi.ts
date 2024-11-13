@@ -1,9 +1,11 @@
 import { Nonprofit, NonprofitApiResponse } from '../types';
+import { fetchGlobalGivingNonprofits } from './globalGivingApi';
+import { calculateSimilarity } from '../utils/stringUtils';
 import { ITEMS_PER_PAGE } from '../constants';
 
-const API_KEY = 'pk_live_92627da7257d1affac0777ccf38238e7';
+const EVERYORG_API_KEY = 'pk_live_92627da7257d1affac0777ccf38238e7';
 
-const filterAndMapNonprofits = (nonprofits: any[]): Nonprofit[] => {
+const filterAndMapEveryOrgNonprofits = (nonprofits: any[]): Nonprofit[] => {
   return nonprofits
     .filter(np => (
       np.name &&
@@ -13,7 +15,7 @@ const filterAndMapNonprofits = (nonprofits: any[]): Nonprofit[] => {
       (np.slug || np.websiteUrl)
     ))
     .map(np => ({
-      id: `${np.ein || np.websiteUrl}-${np.slug || ''}`.replace(/[^\w-]/g, '-'),
+      id: `eo-${np.ein || np.websiteUrl}-${np.slug || ''}`.replace(/[^\w-]/g, '-'),
       name: np.name,
       description: np.description,
       logoUrl: np.logoUrl || '',
@@ -23,18 +25,19 @@ const filterAndMapNonprofits = (nonprofits: any[]): Nonprofit[] => {
       websiteUrl: np.websiteUrl,
       ein: np.ein || '',
       profileUrl: np.profileUrl || '',
-      slug: np.slug || ''
+      slug: np.slug || '',
+      source: 'everyorg' as const
     }));
 };
 
-export const fetchNonprofits = async (searchTerm: string, offset: number): Promise<NonprofitApiResponse> => {
+const fetchEveryOrgNonprofits = async (searchTerm: string, offset: number): Promise<NonprofitApiResponse> => {
   try {
     if (!searchTerm.trim()) {
       return { results: [], hasMore: false, total: 0 };
     }
 
     const encodedTerm = encodeURIComponent(searchTerm.trim());
-    const url = `https://partners.every.org/v0.2/search/${encodedTerm}?apiKey=${API_KEY}&take=${ITEMS_PER_PAGE}&offset=${offset}`;
+    const url = `https://partners.every.org/v0.2/search/${encodedTerm}?apiKey=${EVERYORG_API_KEY}&take=${ITEMS_PER_PAGE}&offset=${offset}`;
     
     const response = await fetch(url);
     
@@ -49,7 +52,7 @@ export const fetchNonprofits = async (searchTerm: string, offset: number): Promi
       return { results: [], hasMore: false, total: 0 };
     }
 
-    const results = filterAndMapNonprofits(data.nonprofits);
+    const results = filterAndMapEveryOrgNonprofits(data.nonprofits);
     const total = parseInt(data.total) || 0;
     const hasMore = results.length === ITEMS_PER_PAGE && offset + results.length < total;
 
@@ -59,7 +62,58 @@ export const fetchNonprofits = async (searchTerm: string, offset: number): Promi
       total
     };
   } catch (error) {
-    console.error('Error fetching nonprofits:', error);
-    throw error;
+    console.error('Error fetching Every.org nonprofits:', error);
+    return { results: [], hasMore: false, total: 0 };
+  }
+};
+
+const removeDuplicates = (nonprofits: Nonprofit[]): Nonprofit[] => {
+  const uniqueNonprofits: Nonprofit[] = [];
+  const SIMILARITY_THRESHOLD = 0.8;
+
+  for (const nonprofit of nonprofits) {
+    // Check if we already have a similar nonprofit
+    const isDuplicate = uniqueNonprofits.some(existing => {
+      const similarity = calculateSimilarity(existing.name, nonprofit.name);
+      return similarity >= SIMILARITY_THRESHOLD;
+    });
+
+    if (!isDuplicate) {
+      uniqueNonprofits.push(nonprofit);
+    }
+  }
+
+  return uniqueNonprofits;
+};
+
+export const fetchNonprofits = async (searchTerm: string, offset: number): Promise<NonprofitApiResponse> => {
+  try {
+    // Fetch from both APIs in parallel
+    const [everyOrgResults, globalGivingResults] = await Promise.all([
+      fetchEveryOrgNonprofits(searchTerm, offset),
+      fetchGlobalGivingNonprofits(searchTerm, offset)
+    ]);
+
+    // Combine results
+    const combinedResults = [
+      ...everyOrgResults.results,
+      ...globalGivingResults.results
+    ];
+
+    // Remove duplicates using fuzzy matching
+    const uniqueResults = removeDuplicates(combinedResults);
+
+    // Sort results by name
+    uniqueResults.sort((a, b) => a.name.localeCompare(b.name));
+
+    return {
+      results: uniqueResults.slice(0, ITEMS_PER_PAGE),
+      hasMore: everyOrgResults.hasMore || globalGivingResults.hasMore,
+      total: Math.min(everyOrgResults.total + globalGivingResults.total, 1000) // Cap total to avoid unrealistic numbers
+    };
+  } catch (error) {
+    console.error('Error fetching combined nonprofits:', error);
+    // Return just Every.org results if there's an error
+    return fetchEveryOrgNonprofits(searchTerm, offset);
   }
 };

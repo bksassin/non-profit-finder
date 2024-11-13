@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Header } from './components/Header';
 import { SearchSection } from './components/SearchSection';
 import { NonprofitGrid } from './components/NonprofitGrid';
@@ -6,6 +6,7 @@ import { LoadingSpinner } from './components/LoadingSpinner';
 import { LoadMoreButton } from './components/LoadMoreButton';
 import { EmptyState } from './components/EmptyState';
 import { Footer } from './components/Footer';
+import { LandingPage } from './components/LandingPage'
 import { fetchNonprofits } from './api/nonprofitApi';
 import { matchesSearch } from './utils/searchUtils';
 import { SUGGESTED_CATEGORIES, ITEMS_PER_PAGE } from './constants';
@@ -20,6 +21,7 @@ const DEFAULT_SEARCH_TERMS = [
 ];
 
 function App() {
+  const [showLanding, setShowLanding] = useState(true);
   const [nonprofits, setNonprofits] = useState<Nonprofit[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -28,7 +30,6 @@ function App() {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [totalResults, setTotalResults] = useState(0);
   const [usedTerms, setUsedTerms] = useState<Set<string>>(new Set());
 
   const getRandomSearchTerms = (count: number): string[] => {
@@ -101,7 +102,6 @@ function App() {
         });
       }
 
-      setTotalResults(totalCount);
       setHasMore(uniqueResults.length >= ITEMS_PER_PAGE);
       setPage(prev => isInitialLoad ? 0 : prev + 1);
 
@@ -130,6 +130,22 @@ function App() {
     return () => clearTimeout(debounce);
   }, [search, activeCategory]);
 
+  useEffect(() => {
+    const hasVisited = localStorage.getItem('hasVisitedBefore');
+    if (hasVisited) {
+      setShowLanding(false);
+    }
+  }, []);
+
+  const handleStart = () => {
+    localStorage.setItem('hasVisitedBefore', 'true');
+    setShowLanding(false);
+  };
+
+  if (showLanding) {
+    return <LandingPage onStart={handleStart} />;
+  }
+
   return (
     <div className="min-h-screen">
       <main className="py-12 px-4 sm:px-6 lg:px-8">
@@ -151,10 +167,6 @@ function App() {
             <LoadingSpinner />
           ) : nonprofits.length > 0 ? (
             <>
-              <div className="text-center text-gray-600 mb-6">
-                Found {totalResults.toLocaleString()} organizations
-              </div>
-              
               <NonprofitGrid nonprofits={nonprofits} />
               
               {hasMore && (
