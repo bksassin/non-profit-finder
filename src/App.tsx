@@ -11,6 +11,7 @@ import { fetchNonprofits } from './api/nonprofitApi';
 import { matchesSearch } from './utils/searchUtils';
 import { SUGGESTED_CATEGORIES, ITEMS_PER_PAGE } from './constants';
 import type { Nonprofit } from './types';
+import { ListYourNonprofit } from './components/ListYourNonprofit';
 
 const DEFAULT_SEARCH_TERMS = [
   'nonprofit', 'charity', 'foundation', 'organization',
@@ -168,7 +169,6 @@ function App() {
           ) : nonprofits.length > 0 ? (
             <>
               <NonprofitGrid nonprofits={nonprofits} />
-              
               {hasMore && (
                 <div className="flex justify-center mt-8">
                   <LoadMoreButton
@@ -177,6 +177,9 @@ function App() {
                   />
                 </div>
               )}
+              <div className="mt-12">
+                <ListYourNonprofit />
+              </div>
             </>
           ) : (
             <EmptyState />
